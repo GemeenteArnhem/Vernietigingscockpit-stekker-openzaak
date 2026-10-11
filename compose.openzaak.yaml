@@ -1,0 +1,110 @@
+# Een echte Open Zaak om de stekker tegen te ontwikkelen en te testen (stap 5), los van de
+# Cockpit. Geheimen komen uit de omgeving (scripts/openzaak-test.mjs maakt ze per run aan, of
+# zet ze zelf in .env.openzaak); er staan geen wachtwoorden in git.
+#
+#   docker compose -f compose.openzaak.yaml --env-file .env.openzaak -p stekker-openzaak-dev up -d
+#
+# Open Zaak is daarna bereikbaar op http://localhost:${OPENZAAK_HOST_POORT:-8490} (beheer: /admin/).
+
+services:
+  openzaak-db:
+    image: postgis/postgis:15-3.4
+    environment:
+      POSTGRES_DB: openzaak
+      POSTGRES_USER: openzaak
+      POSTGRES_PASSWORD: ${OPENZAAK_DB_WACHTWOORD:?OPENZAAK_DB_WACHTWOORD ontbreekt}
+    volumes:
+      - openzaak-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openzaak -d openzaak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  openzaak-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  openzaak:
+    image: openzaak/open-zaak:1.30.0
+    environment: &openzaak-env
+      DJANGO_SETTINGS_MODULE: openzaak.conf.docker
+      SECRET_KEY: ${OPENZAAK_SECRET_KEY:?OPENZAAK_SECRET_KEY ontbreekt}
+      DB_HOST: openzaak-db
+      DB_NAME: openzaak
+      DB_USER: openzaak
+      DB_PASSWORD: ${OPENZAAK_DB_WACHTWOORD}
+      ALLOWED_HOSTS: "*"
+      CACHE_DEFAULT: openzaak-redis:6379/0
+      CACHE_AXES: openzaak-redis:6379/0
+      CELERY_BROKER_URL: redis://openzaak-redis:6379/1
+      CELERY_RESULT_BACKEND: redis://openzaak-redis:6379/1
+      NOTIFICATIONS_DISABLED: "true"
+      DISABLE_2FA: "true"
+      IS_HTTPS: "false"
+      OPENZAAK_SUPERUSER_USERNAME: admin
+      OPENZAAK_SUPERUSER_EMAIL: admin@example.test
+      DJANGO_SUPERUSER_PASSWORD: ${OPENZAAK_ADMIN_WACHTWOORD:?OPENZAAK_ADMIN_WACHTWOORD ontbreekt}
+      UWSGI_PROCESSES: "2"
+      # Geen OpenTelemetry-collector in deze opzet; anders blijft het exporteren hangen.
+      OTEL_SDK_DISABLED: "True"
+      UWSGI_THREADS: "4"
+    ports:
+      - "127.0.0.1:${OPENZAAK_HOST_POORT:-8490}:8000"
+    depends_on:
+      openzaak-db:
+        condition: service_healthy
+      openzaak-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/zaken/api/v1/', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      start_period: 60s
+      retries: 30
+
+  # Eenmalig: de inloggegevens (client-id + secret) van het seed-account en de stekker, en de
+  # applicatie van het seed-account (alle rechten, voor scripts/seed-openzaak.mjs). De
+  # applicatie van de stekker, met alleen de rechten die hij nodig heeft, maakt het seedscript
+  # via de Autorisaties API aan (setup_configuration kent alleen 'alle autorisaties').
+  openzaak-init:
+    image: openzaak/open-zaak:1.30.0
+    environment:
+      <<: *openzaak-env
+      OPENZAAK_SEED_CLIENT_ID: ${OPENZAAK_SEED_CLIENT_ID:-vernietigingscockpit-seed}
+      OPENZAAK_SEED_SECRET: ${OPENZAAK_SEED_SECRET:?OPENZAAK_SEED_SECRET ontbreekt}
+      OPENZAAK_CLIENT_ID: ${OPENZAAK_CLIENT_ID:-vernietigingscockpit-stekker}
+      OPENZAAK_SECRET: ${OPENZAAK_SECRET:?OPENZAAK_SECRET ontbreekt}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        cat > /tmp/setup.yaml <<EOF
+        vng_api_common_credentials_config_enable: true
+        vng_api_common_credentials:
+          items:
+            - identifier: $${OPENZAAK_SEED_CLIENT_ID}
+              secret: $${OPENZAAK_SEED_SECRET}
+            - identifier: $${OPENZAAK_CLIENT_ID}
+              secret: $${OPENZAAK_SECRET}
+        vng_api_common_applicaties_config_enable: true
+        vng_api_common_applicaties:
+          items:
+            - uuid: 7a2d1c8e-0f3b-4c5d-9e6f-a1b2c3d4e5f6
+              client_ids:
+                - $${OPENZAAK_SEED_CLIENT_ID}
+              label: Vernietigingscockpit seed (testgegevens)
+              heeft_alle_autorisaties: true
+        EOF
+        cd /app && src/manage.py setup_configuration --yaml-file /tmp/setup.yaml
+    depends_on:
+      openzaak:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  openzaak-db:

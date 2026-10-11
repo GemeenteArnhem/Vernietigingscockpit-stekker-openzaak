@@ -1,0 +1,1252 @@
+openapi: 3.0.3
+info:
+  title: Stekker API
+  version: 2.0.0
+  license:
+    name: EUPL-1.2
+    url: https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+  description: |
+    API voor selectie van vernietigingskandidaten en uitvoering van vernietiging.
+    Ontworpen conform API Design Rules (ADR), Common Ground en NeRDS-leidraad.
+
+    **MDTO is leidend** (ADR-0005). Gegevens over informatieobjecten gebruiken de namen,
+    definities, structuren en kardinaliteiten van MDTO 1.0 / MDTO-XML 1.0.1
+    (Nationaal Archief). JSON-sleutels zijn de MDTO-attribuutnamen. Begripvelden
+    (`begripGegevens`) krijgen hun waarde uit een MDTO-begrippenlijst of een eigen
+    begrippenlijst (`designrules/begrippenlijsten/`).
+
+    Een vernietigingskandidaat is precies één MDTO-informatieobject op aggregatieniveau
+    Archief, Serie, Dossier of Archiefstuk (ADR-0001, ADR-0005 B-M2).
+
+    Wijzigingen ten opzichte van v1.0.0: zie ADR-0005 §4. `Idempotency-Key` is verplicht
+    op alle muterende verzoeken (ADR-0004).
+
+servers:
+  - url: https://api.voorbeeld.nl/v2
+    description: De major versie is onderdeel van de URI (API Design Rules API-20).
+
+security:
+  - oauth2:
+      - selectie.read
+      - selectie.write
+      - vernietiging.read
+      - vernietiging.write
+
+paths:
+  /selecties:
+    post:
+      summary: Start een nieuwe selectie
+      operationId: startSelectie
+      security:
+        - oauth2: [selectie.write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectieStart'
+      responses:
+        '202':
+          description: Selectie gestart (of eerder gestart met dezelfde Idempotency-Key)
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selectie'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /selecties/{selectieId}:
+    get:
+      summary: Haal de status en metadata van een selectie op
+      operationId: getSelectie
+      security:
+        - oauth2: [selectie.read]
+      parameters:
+        - $ref: '#/components/parameters/SelectieId'
+      responses:
+        '200':
+          description: Selectie
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selectie'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /selecties/{selectieId}/vernietigingskandidaten:
+    get:
+      summary: Haal vernietigingskandidaten uit een selectie op
+      description: |
+        Gepagineerd. Gebruik `offset` of `cursor`, niet allebei (anders 400).
+        Zolang de selectie niet `READY` is, volgt 409 (`SELECTIE_NOT_READY`).
+      operationId: getVernietigingskandidaten
+      security:
+        - oauth2: [selectie.read]
+      parameters:
+        - $ref: '#/components/parameters/SelectieId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Pagina met vernietigingskandidaten
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VernietigingskandidatenPagina'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vernietigingen:
+    post:
+      summary: Start een nieuwe vernietigingsuitvoering
+      operationId: startVernietiging
+      security:
+        - oauth2: [vernietiging.write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VernietigingStart'
+      responses:
+        '202':
+          description: Vernietigingsuitvoering aangemaakt (status IDLE)
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vernietigingsuitvoering'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vernietigingen/{vernietigingId}:
+    get:
+      summary: Haal de status van een vernietigingsuitvoering op
+      operationId: getVernietiging
+      security:
+        - oauth2: [vernietiging.read]
+      parameters:
+        - $ref: '#/components/parameters/VernietigingId'
+      responses:
+        '200':
+          description: Status van vernietigingsuitvoering
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vernietigingsuitvoering'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vernietigingen/{vernietigingId}/batches:
+    post:
+      summary: Bied een batch vernietigingskandidaten ter vernietiging aan
+      operationId: verwerkVernietigingBatch
+      security:
+        - oauth2: [vernietiging.write]
+      parameters:
+        - $ref: '#/components/parameters/VernietigingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VernietigingBatch'
+      responses:
+        '202':
+          description: Batch ontvangen
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResultaat'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      summary: Haal alle batchresultaten van een vernietigingsuitvoering op
+      operationId: getBatchResultaten
+      security:
+        - oauth2: [vernietiging.read]
+      parameters:
+        - $ref: '#/components/parameters/VernietigingId'
+      responses:
+        '200':
+          description: Lijst met batchresultaten
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BatchResultaat'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vernietigingen/{vernietigingId}/vrijgeven:
+    post:
+      summary: Geef een vernietigingsuitvoering vrij voor technische uitvoering
+      operationId: geefVernietigingVrij
+      security:
+        - oauth2: [vernietiging.write]
+      parameters:
+        - $ref: '#/components/parameters/VernietigingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VernietigingVrijgave'
+      responses:
+        '202':
+          description: Vernietigingsuitvoering vrijgegeven voor technische uitvoering
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vernietigingsuitvoering'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vernietigingen/{vernietigingId}/batches/{batchNummer}:
+    get:
+      summary: Haal het resultaat van een specifieke batch op
+      operationId: getBatchResultaat
+      security:
+        - oauth2: [vernietiging.read]
+      parameters:
+        - $ref: '#/components/parameters/VernietigingId'
+        - $ref: '#/components/parameters/BatchNummer'
+      responses:
+        '200':
+          description: Resultaat van batch
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResultaat'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vernietigingen/{vernietigingId}/specificaties/{vernietigingskandidaatId}:
+    get:
+      summary: Haal de MDTO-specificatie van een vernietigde kandidaat op
+      description: |
+        Specificatie van de vernietiging in de zin van art. 8 Archiefbesluit 1995 (ADR-0005, B-M2).
+        Eén MDTO-XML-document (MDTO-XML 1.0.1) met het vernietigde informatieobject
+        (de kandidaat) als `informatieobject`, met:
+        - `identificatie`, `naam`, `aggregatieniveau`, `waardering`, `bewaartermijn`,
+          `informatiecategorie`, `archiefvormer` en `beperkingGebruik` zoals bij selectie;
+        - een `event` met `eventType` *Vernietigen* (MDTO EventTypeLijst), de `eventTijd` van de
+          vernietiging en een `eventResultaat` met de vernietigingsmethode;
+        - per direct onderliggend informatieobject een `bevatOnderdeel` met naam en identificatie
+          (bij Archief, Serie en Dossier).
+
+        Alleen beschikbaar voor kandidaten met resultaat `SUCCESS`; anders volgt 409
+        (`SPECIFICATIE_NIET_BESCHIKBAAR`). De cockpit neemt het document als bestand met
+        checksum op in het vernietigingsdossier.
+      operationId: getSpecificatie
+      security:
+        - oauth2: [vernietiging.read]
+      parameters:
+        - $ref: '#/components/parameters/VernietigingId'
+        - $ref: '#/components/parameters/VernietigingskandidaatId'
+      responses:
+        '200':
+          description: MDTO-XML-specificatie
+          headers:
+            API-Version:
+              $ref: '#/components/headers/API-Version'
+          content:
+            application/xml:
+              schema:
+                type: string
+                description: MDTO-XML 1.0.1-document (namespace https://www.nationaalarchief.nl/mdto).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  headers:
+    API-Version:
+      description: Volledig versienummer van de API (API Design Rules API-57).
+      schema:
+        type: string
+        example: 2.0.0
+
+  responses:
+    BadRequest:
+      description: |
+        Ongeldige of onvolledige request. Ook bij een ontbrekende
+        `Idempotency-Key` op een muterend verzoek (`IDEMPOTENCY_KEY_MISSING`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Fout'
+
+    Unauthorized:
+      description: Authenticatie ontbreekt of is ongeldig.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Fout'
+
+    Forbidden:
+      description: De client is niet geautoriseerd voor deze actie.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Fout'
+
+    NotFound:
+      description: De gevraagde resource bestaat niet of is niet beschikbaar voor deze client.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Fout'
+
+    Conflict:
+      description: |
+        De request conflicteert met de actuele resource-status of met een eerdere aanlevering,
+        bijvoorbeeld dezelfde `Idempotency-Key` met een andere inhoud (`IDEMPOTENCY_KEY_REUSED`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Fout'
+
+    InternalServerError:
+      description: Onverwachte technische fout.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Fout'
+
+  parameters:
+    SelectieId:
+      in: path
+      name: selectieId
+      required: true
+      schema:
+        type: string
+      description: Stabiele identificatie van de selectie binnen de Stekker.
+
+    VernietigingId:
+      in: path
+      name: vernietigingId
+      required: true
+      schema:
+        type: string
+      description: Stabiele identificatie van de vernietigingsuitvoering binnen de Stekker.
+
+    VernietigingskandidaatId:
+      in: path
+      name: vernietigingskandidaatId
+      required: true
+      schema:
+        type: string
+      description: Identificatie van de vernietigingskandidaat, uniek binnen de selectie waarop de vernietiging is gebaseerd (ADR-0007).
+
+    BatchNummer:
+      in: path
+      name: batchNummer
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      description: Nummer van de technische batch binnen een vernietigingsuitvoering.
+
+    Offset:
+      in: query
+      name: offset
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    Limit:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+
+    Cursor:
+      in: query
+      name: cursor
+      required: false
+      schema:
+        type: string
+      description: Opake cursor uit `nextCursor`; alternatief voor `offset`.
+
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+      description: |
+        Verplicht op alle muterende verzoeken (ADR-0004). Zelfde sleutel en zelfde inhoud:
+        de stekker voert niets opnieuw uit en geeft hetzelfde antwoord. Zelfde sleutel met
+        andere inhoud: 409 `IDEMPOTENCY_KEY_REUSED`. Ontbreekt de sleutel: 400
+        `IDEMPOTENCY_KEY_MISSING`. De stekker bewaart sleutels minimaal 7 dagen.
+
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.voorbeeld.nl/oauth/token
+          scopes:
+            selectie.read: Lezen van selecties en vernietigingskandidaten
+            selectie.write: Starten van selecties
+            vernietiging.read: Lezen van vernietigingsstatussen, resultaten en specificaties
+            vernietiging.write: Starten van vernietiging en aanbieden van batches
+
+  schemas:
+    # ------------------------------------------------------------------
+    # MDTO-gegevensgroepen (MDTO-XML 1.0.1). Namen en kardinaliteit volgen MDTO.
+    # ------------------------------------------------------------------
+    identificatieGegevens:
+      type: object
+      description: MDTO identificatieGegevens.
+      required:
+        - identificatieKenmerk
+        - identificatieBron
+      properties:
+        identificatieKenmerk:
+          type: string
+          description: Kenmerk waarmee het object geïdentificeerd kan worden.
+        identificatieBron:
+          type: string
+          description: Herkomst van het kenmerk; de context waarbinnen het kenmerk uniek is.
+
+    verwijzingGegevens:
+      type: object
+      description: MDTO verwijzingGegevens.
+      required:
+        - verwijzingNaam
+      properties:
+        verwijzingNaam:
+          type: string
+        verwijzingIdentificatie:
+          $ref: '#/components/schemas/identificatieGegevens'
+
+    begripGegevens:
+      type: object
+      description: MDTO begripGegevens. De waarde komt uit de begrippenlijst in `begripBegrippenlijst`.
+      required:
+        - begripLabel
+        - begripBegrippenlijst
+      properties:
+        begripLabel:
+          type: string
+        begripCode:
+          type: string
+        begripBegrippenlijst:
+          $ref: '#/components/schemas/verwijzingGegevens'
+
+    dekkingInTijdGegevens:
+      type: object
+      description: MDTO dekkingInTijdGegevens. Type uit de lijst Cockpit-dekkingInTijdtypen.
+      required:
+        - dekkingInTijdType
+        - dekkingInTijdBegindatum
+      properties:
+        dekkingInTijdType:
+          $ref: '#/components/schemas/begripGegevens'
+        dekkingInTijdBegindatum:
+          $ref: '#/components/schemas/MdtoDatum'
+        dekkingInTijdEinddatum:
+          $ref: '#/components/schemas/MdtoDatum'
+
+    gerelateerdInformatieobjectGegevens:
+      type: object
+      description: MDTO gerelateerdInformatieobjectGegevens. Type uit de MDTO-lijst Relatietypen (informatieobject).
+      required:
+        - gerelateerdInformatieobjectVerwijzing
+        - gerelateerdInformatieobjectTypeRelatie
+      properties:
+        gerelateerdInformatieobjectVerwijzing:
+          $ref: '#/components/schemas/verwijzingGegevens'
+        gerelateerdInformatieobjectTypeRelatie:
+          $ref: '#/components/schemas/begripGegevens'
+
+    MdtoDatum:
+      type: string
+      description: "MDTO-datum: jaar (`2020`), jaar-maand (`2020-05`) of datum (`2020-05-17`)."
+      pattern: '^\d{4}(-\d{2}(-\d{2})?)?$'
+
+    # ------------------------------------------------------------------
+    # MDTO-profiel voor de vernietigingskandidaat (beperkingen op MDTO-groepen).
+    # ------------------------------------------------------------------
+    Aggregatieniveau:
+      type: object
+      description: |
+        MDTO aggregatieniveau, uitsluitend uit de MDTO-lijst Aggregatieniveaus (ADR-0005, B-M2).
+        `begripBegrippenlijst.verwijzingNaam` = `Begrippenlijst Aggregatieniveaus MDTO`.
+      required:
+        - begripLabel
+        - begripBegrippenlijst
+      properties:
+        begripLabel:
+          type: string
+          enum: [Archief, Serie, Dossier, Archiefstuk]
+        begripCode:
+          type: string
+        begripBegrippenlijst:
+          $ref: '#/components/schemas/verwijzingGegevens'
+
+    Waardering:
+      type: object
+      description: |
+        MDTO waardering uit de gesloten MDTO-lijst Waarderingen.
+        `begripBegrippenlijst.verwijzingNaam` = `Begrippenlijst Waarderingen MDTO`.
+        Alleen `V` is vernietigbaar; een kandidaat met `B` of `N` sluit de cockpit
+        automatisch uit (ADR-0005, B-M1).
+      required:
+        - begripLabel
+        - begripCode
+        - begripBegrippenlijst
+      properties:
+        begripLabel:
+          type: string
+          enum: [Blijvend te bewaren, Tijdelijk te bewaren, Nader te bepalen]
+        begripCode:
+          type: string
+          enum: [B, V, N]
+        begripBegrippenlijst:
+          $ref: '#/components/schemas/verwijzingGegevens'
+
+    Bewaartermijn:
+      type: object
+      description: |
+        MDTO termijnGegevens voor de bewaartermijn. Voor een vernietigingskandidaat is
+        `termijnEinddatum` verplicht (datum waarop vernietiging mag plaatsvinden). Trigger en
+        startdatum zijn verplicht zodra bekend; zo is einddatum = startdatum + looptijd controleerbaar.
+      required:
+        - termijnEinddatum
+      properties:
+        termijnTriggerStartLooptijd:
+          $ref: '#/components/schemas/begripGegevens'
+        termijnStartdatumLooptijd:
+          type: string
+          format: date
+        termijnLooptijd:
+          type: string
+          description: ISO 8601-duur (`xs:duration`), bijvoorbeeld `P5Y`.
+          pattern: '^P(?=\d|T\d)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(\d+H)?(\d+M)?(\d+S)?)?$'
+        termijnEinddatum:
+          type: string
+          format: date
+
+    Informatiecategorie:
+      type: object
+      description: |
+        MDTO informatiecategorie: de categorie uit de vastgestelde selectielijst.
+        `begripCode` = codering van de categorie in de selectielijst, `begripLabel` = titel van de
+        categorie, `begripBegrippenlijst` = de selectielijst zelf (ADR-0008, DR-SL-05).
+        Een afwijkende norm (hotspotlijst, specifieke wetgeving) gaat via `informatiecategorieAfwijking`.
+      required:
+        - begripLabel
+        - begripBegrippenlijst
+      properties:
+        begripLabel:
+          type: string
+        begripCode:
+          type: string
+        begripBegrippenlijst:
+          $ref: '#/components/schemas/Selectielijstverwijzing'
+
+    Selectielijstverwijzing:
+      type: object
+      description: |
+        MDTO verwijzingGegevens naar een vastgestelde selectielijst (ADR-0008).
+        `verwijzingNaam` = titel van de selectielijst (informatief).
+        `verwijzingIdentificatie.identificatieKenmerk` = de selectielijstcode uit de begrippenlijst
+        Cockpit-selectielijsten (`designrules/begrippenlijsten/cockpit-selectielijsten.md`),
+        bijvoorbeeld `GEM-2020`; `identificatieBron` = `Cockpit-selectielijsten`.
+        Een code die aan het patroon voldoet maar niet in het register staat, levert in de
+        cockpit een waarschuwing op; de kandidaat blijft (DR-SL-06).
+      required:
+        - verwijzingNaam
+        - verwijzingIdentificatie
+      properties:
+        verwijzingNaam:
+          type: string
+        verwijzingIdentificatie:
+          type: object
+          required:
+            - identificatieKenmerk
+            - identificatieBron
+          properties:
+            identificatieKenmerk:
+              type: string
+              description: Selectielijstcode `CODE-YYYY` of `CODE-YYYY.VV` (DR-SL-01).
+              pattern: '^[A-Z][A-Z0-9]{1,11}-[0-9]{4}(\.[0-9]{2})?$'
+            identificatieBron:
+              type: string
+              enum: [Cockpit-selectielijsten]
+
+    InformatiecategorieAfwijking:
+      type: object
+      description: |
+        Cockpituitbreiding (geen MDTO-attribuut). Toelichting als de toegepaste informatiecategorie
+        of bewaartermijn afwijkt van de standaardselectielijst (bijv. hotspot, specifieke wetgeving).
+      required:
+        - toelichting
+      properties:
+        toelichting:
+          type: string
+        norm:
+          $ref: '#/components/schemas/verwijzingGegevens'
+
+    VernietigingsEvent:
+      type: object
+      description: |
+        MDTO eventGegevens voor de vernietiging. `eventType.begripLabel` = `Vernietigen`
+        (MDTO EventTypeLijst). `eventTijd` is het tijdstip van vernietiging (Archiefbesluit art. 8).
+        `eventVerantwoordelijkeActor` vult de cockpit (de zorgdrager), niet de stekker.
+      required:
+        - eventType
+        - eventTijd
+      properties:
+        eventType:
+          $ref: '#/components/schemas/begripGegevens'
+        eventTijd:
+          type: string
+          format: date-time
+        eventResultaat:
+          type: string
+
+    # ------------------------------------------------------------------
+    # Resources
+    # ------------------------------------------------------------------
+    SelectieStart:
+      type: object
+      description: Optionele parameters voor het starten van een selectie.
+      properties:
+        peildatum:
+          type: string
+          format: date
+          description: Datum waarop selectieregels worden toegepast; alleen kandidaten met `bewaartermijn.termijnEinddatum` ≤ peildatum.
+
+    Selectie:
+      type: object
+      required:
+        - selectieId
+        - status
+      properties:
+        selectieId:
+          type: string
+        peildatum:
+          type: string
+          format: date
+        selectietijdstip:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/SelectieStatus'
+        totaalKandidaten:
+          type: integer
+          minimum: 0
+        totaalObjecten:
+          type: integer
+          minimum: 0
+          description: Som van `aantalObjecten` van de kandidaten in de selectie.
+        totaalBetrokkenen:
+          type: integer
+          minimum: 0
+        stekkerNaam:
+          type: string
+        stekkerOmschrijving:
+          type: string
+        stekkerversie:
+          type: string
+        configuratieversie:
+          type: string
+        apiVersie:
+          type: string
+        aantalWaarschuwingen:
+          type: integer
+          minimum: 0
+        aantalFouten:
+          type: integer
+          minimum: 0
+      example:
+        selectieId: sel-2026-001
+        peildatum: '2026-09-23'
+        selectietijdstip: '2026-09-23T09:30:00Z'
+        status: READY
+        totaalKandidaten: 126
+        totaalObjecten: 892
+        totaalBetrokkenen: 74
+        stekkerNaam: SociaalDomeinStekker
+        stekkerversie: 2.0.0
+        configuratieversie: '2026.09'
+        apiVersie: 2.0.0
+        aantalWaarschuwingen: 0
+        aantalFouten: 0
+
+    Vernietigingskandidaat:
+      type: object
+      description: |
+        Precies één MDTO-informatieobject (aggregatieniveau Archief, Serie, Dossier of
+        Archiefstuk) met de MDTO-gegevens voor beoordeling, besluit en verantwoording.
+        `identificatie` bevat minimaal de technische sleutel in de bron; daarnaast bij voorkeur
+        het voor mensen herkenbare kenmerk (bijv. zaaknummer), elk met eigen `identificatieBron`.
+      required:
+        - vernietigingskandidaatId
+        - identificatie
+        - naam
+        - aggregatieniveau
+        - waardering
+        - bewaartermijn
+        - informatiecategorie
+      properties:
+        vernietigingskandidaatId:
+          type: string
+          description: |
+            Identificatie van de kandidaat (eigen begrip), uniek en stabiel binnen één selectie en in de
+            vernietigingen en resultaten die op die selectie gebaseerd zijn. Hergebruik voor hetzelfde object
+            in een volgende selectie mag, maar de cockpit geeft daar geen betekenis aan; hetzelfde object
+            herken je aan `identificatie` (ADR-0007, DR-01 en DR-02).
+        identificatie:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/identificatieGegevens'
+        naam:
+          type: string
+          description: MDTO naam; betekenisvolle aanduiding, bijv. de titel van het dossier.
+        omschrijving:
+          type: array
+          items:
+            type: string
+          description: MDTO omschrijving van de inhoud.
+        aggregatieniveau:
+          $ref: '#/components/schemas/Aggregatieniveau'
+        classificatie:
+          type: array
+          items:
+            $ref: '#/components/schemas/begripGegevens'
+          description: MDTO classificatie; `begripBegrippenlijst` = het classificatieschema (bijv. ZTC, BAC).
+        dekkingInTijd:
+          type: array
+          items:
+            $ref: '#/components/schemas/dekkingInTijdGegevens'
+        waardering:
+          $ref: '#/components/schemas/Waardering'
+        bewaartermijn:
+          $ref: '#/components/schemas/Bewaartermijn'
+        informatiecategorie:
+          $ref: '#/components/schemas/Informatiecategorie'
+        informatiecategorieAfwijking:
+          $ref: '#/components/schemas/InformatiecategorieAfwijking'
+        isOnderdeelVan:
+          type: array
+          items:
+            $ref: '#/components/schemas/verwijzingGegevens'
+        gerelateerdInformatieobject:
+          type: array
+          items:
+            $ref: '#/components/schemas/gerelateerdInformatieobjectGegevens'
+        archiefvormer:
+          type: array
+          items:
+            $ref: '#/components/schemas/verwijzingGegevens'
+          description: Afwijkende archiefvormer; ontbreekt hij, dan geldt die van de taakuitvoering (profiel van de proceseigenaar, ADR-0005, B-M3).
+        activiteit:
+          $ref: '#/components/schemas/verwijzingGegevens'
+        aantalObjecten:
+          type: integer
+          minimum: 0
+          description: |
+            Cockpituitbreiding. Aantal direct onderliggende informatieobjecten in de momentopname,
+            gelijk aan het aantal `bevatOnderdeel` in de specificatie. Dieper liggende niveaus tellen
+            niet mee; een archiefstuk heeft 0 (ADR-0007, DR-04).
+        aantalBetrokkenen:
+          type: integer
+          minimum: 0
+          description: Cockpituitbreiding. Aantal unieke betrokkenen.
+        toelichting:
+          type: string
+          description: Cockpituitbreiding. Toelichting van de stekker op selectie of afwijkingen.
+      example:
+        vernietigingskandidaatId: kandidaat-000123
+        identificatie:
+          - identificatieKenmerk: 8f7410a8-3b8a-42a8-8c10-7424f589e501
+            identificatieBron: Zaaksysteem sociaal domein (technische sleutel)
+          - identificatieKenmerk: ZAAK-2020-00421
+            identificatieBron: Zaaknummering gemeente Voorbeeld
+        naam: Handhaving bijstand ZAAK-2020-00421
+        aggregatieniveau:
+          begripLabel: Dossier
+          begripBegrippenlijst:
+            verwijzingNaam: Begrippenlijst Aggregatieniveaus MDTO
+        classificatie:
+          - begripLabel: Handhaving bijstand
+            begripCode: ZTC-SD-BZ-007
+            begripBegrippenlijst:
+              verwijzingNaam: ZTC sociaal domein
+        dekkingInTijd:
+          - dekkingInTijdType:
+              begripLabel: Looptijd
+              begripCode: looptijd
+              begripBegrippenlijst:
+                verwijzingNaam: Cockpit-dekkingInTijdtypen
+            dekkingInTijdBegindatum: '2020-01-06'
+            dekkingInTijdEinddatum: '2020-12-14'
+        waardering:
+          begripLabel: Tijdelijk te bewaren
+          begripCode: V
+          begripBegrippenlijst:
+            verwijzingNaam: Begrippenlijst Waarderingen MDTO
+        bewaartermijn:
+          termijnTriggerStartLooptijd:
+            begripLabel: Afgehandeld
+            begripCode: afgehandeld
+            begripBegrippenlijst:
+              verwijzingNaam: Cockpit-termijntriggers
+          termijnStartdatumLooptijd: '2020-12-14'
+          termijnLooptijd: P5Y
+          termijnEinddatum: '2025-12-14'
+        informatiecategorie:
+          begripLabel: Handhaving
+          begripCode: 11.1.2
+          begripBegrippenlijst:
+            verwijzingNaam: Selectielijst gemeenten en intergemeentelijke organen 2020
+            verwijzingIdentificatie:
+              identificatieKenmerk: GEM-2020
+              identificatieBron: Cockpit-selectielijsten
+        aantalObjecten: 4
+        aantalBetrokkenen: 1
+
+    VernietigingskandidatenPagina:
+      type: object
+      required:
+        - selectieId
+        - items
+      properties:
+        selectieId:
+          type: string
+        offset:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        cursor:
+          type: string
+        nextCursor:
+          type: string
+        totaal:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vernietigingskandidaat'
+
+    VernietigingStart:
+      type: object
+      required:
+        - selectieId
+        - cockpitTaakId
+        - besluitReferentie
+      properties:
+        selectieId:
+          type: string
+          description: Selectie waarop de vernietigingsuitvoering is gebaseerd.
+        cockpitTaakId:
+          type: string
+          description: Verwijzing naar de Cockpit-taak voor herleidbaarheid.
+        vernietigingsdossierId:
+          type: string
+          description: Verwijzing naar het vernietigingsdossier in de Cockpit.
+        besluitReferentie:
+          type: string
+          description: Verwijzing naar het genomen besluit of de vrijgave.
+      example:
+        selectieId: sel-2026-001
+        cockpitTaakId: taak-2026-042
+        vernietigingsdossierId: dossier-2026-042
+        besluitReferentie: besluit-archivaris-2026-042
+
+    VernietigingVrijgave:
+      type: object
+      required:
+        - aantalBatches
+        - aantalKandidaten
+      properties:
+        aantalBatches:
+          type: integer
+          minimum: 1
+          description: Aantal batches dat de Cockpit heeft aangeleverd voor deze vernietiging.
+        aantalKandidaten:
+          type: integer
+          minimum: 1
+          description: Aantal vrijgegeven vernietigingskandidaten dat in de batches is aangeleverd.
+      example:
+        aantalBatches: 3
+        aantalKandidaten: 120
+
+    Vernietigingsuitvoering:
+      type: object
+      description: |
+        `vernietigingsmethode` en `vernietigingsmethodeToelichting` zijn verplicht vanaf status
+        `RUNNING` (ADR-0005, B-M4): de wijze van vernietiging (lijst Cockpit-vernietigingsmethoden)
+        en de behandeling van back-ups, replica's, indexen en logbestanden met de termijn waarbinnen
+        restanten zijn uitgedoofd.
+      required:
+        - vernietigingId
+        - selectieId
+        - cockpitTaakId
+        - besluitReferentie
+        - status
+      properties:
+        vernietigingId:
+          type: string
+        selectieId:
+          type: string
+        cockpitTaakId:
+          type: string
+        vernietigingsdossierId:
+          type: string
+        besluitReferentie:
+          type: string
+        status:
+          $ref: '#/components/schemas/VernietigingStatus'
+        starttijd:
+          type: string
+          format: date-time
+        eindtijd:
+          type: string
+          format: date-time
+        totaalKandidaten:
+          type: integer
+          minimum: 0
+        totaalObjecten:
+          type: integer
+          minimum: 0
+          description: Som van `aantalObjecten` van de aangeboden kandidaten.
+        totaalBatches:
+          type: integer
+          minimum: 0
+          description: Aantal batches dat bij vrijgave is aangekondigd.
+        ontvangenBatches:
+          type: integer
+          minimum: 0
+        verwerkteBatches:
+          type: integer
+          minimum: 0
+        succesvolVernietigd:
+          type: integer
+          minimum: 0
+        mislukt:
+          type: integer
+          minimum: 0
+        overgeslagen:
+          type: integer
+          minimum: 0
+        gewijzigd:
+          type: integer
+          minimum: 0
+        nietGevonden:
+          type: integer
+          minimum: 0
+        stekkerNaam:
+          type: string
+        stekkerOmschrijving:
+          type: string
+        stekkerversie:
+          type: string
+        configuratieversie:
+          type: string
+        vernietigingsmethode:
+          $ref: '#/components/schemas/begripGegevens'
+        vernietigingsmethodeToelichting:
+          type: string
+        aantalWaarschuwingen:
+          type: integer
+          minimum: 0
+        aantalFouten:
+          type: integer
+          minimum: 0
+      example:
+        vernietigingId: vernietiging-2026-001
+        selectieId: sel-2026-001
+        cockpitTaakId: taak-2026-042
+        vernietigingsdossierId: dossier-2026-042
+        besluitReferentie: besluit-archivaris-2026-042
+        status: RUNNING
+        totaalKandidaten: 120
+        totaalObjecten: 850
+        totaalBatches: 3
+        ontvangenBatches: 3
+        verwerkteBatches: 1
+        vernietigingsmethode:
+          begripLabel: Verwijderd via bronfunctie
+          begripBegrippenlijst:
+            verwijzingNaam: Cockpit-vernietigingsmethoden
+        vernietigingsmethodeToelichting: Definitieve verwijderfunctie van het zaaksysteem; back-ups verlopen na 35 dagen.
+
+    VernietigingBatch:
+      type: object
+      required:
+        - batchNummer
+        - vernietigingskandidaten
+      properties:
+        batchNummer:
+          type: integer
+          minimum: 1
+        vernietigingskandidaten:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TeVernietigenKandidaat'
+      example:
+        batchNummer: 1
+        vernietigingskandidaten:
+          - vernietigingskandidaatId: kandidaat-000123
+            identificatie:
+              - identificatieKenmerk: 8f7410a8-3b8a-42a8-8c10-7424f589e501
+                identificatieBron: Zaaksysteem sociaal domein (technische sleutel)
+              - identificatieKenmerk: ZAAK-2020-00421
+                identificatieBron: Zaaknummering gemeente Voorbeeld
+
+    TeVernietigenKandidaat:
+      type: object
+      description: |
+        Een vrijgegeven kandidaat. `identificatie` is letterlijk gelijk aan die uit de selectie;
+        bij een verschil weigert de stekker de batch (400).
+      required:
+        - vernietigingskandidaatId
+        - identificatie
+      properties:
+        vernietigingskandidaatId:
+          type: string
+        identificatie:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/identificatieGegevens'
+
+    BatchResultaat:
+      type: object
+      required:
+        - batchNummer
+        - resultaten
+      properties:
+        batchNummer:
+          type: integer
+          minimum: 1
+        resultaten:
+          type: array
+          items:
+            $ref: '#/components/schemas/Uitvoeringsresultaat'
+
+    Uitvoeringsresultaat:
+      type: object
+      description: |
+        Precies één eindresultaat per aangeboden kandidaat. Bij `SUCCESS` is `event` verplicht
+        (MDTO-event *Vernietigen* met tijdstip) en is de specificatie op te halen via
+        `GET /vernietigingen/{vernietigingId}/specificaties/{vernietigingskandidaatId}`.
+      required:
+        - vernietigingskandidaatId
+        - identificatie
+        - resultaat
+      properties:
+        vernietigingskandidaatId:
+          type: string
+        identificatie:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/identificatieGegevens'
+        batchNummer:
+          type: integer
+          minimum: 1
+        resultaat:
+          $ref: '#/components/schemas/UitvoeringsresultaatWaarde'
+        event:
+          $ref: '#/components/schemas/VernietigingsEvent'
+        bronEventReferentie:
+          type: string
+          description: Optioneel (ADR-0005, B-M7). Verwijzing naar het event *Vernietigen* dat de stekker ook in de bron heeft vastgelegd.
+        foutcode:
+          type: string
+        foutmelding:
+          type: string
+        bronstatus:
+          type: string
+        logReference:
+          type: string
+        correlatieId:
+          type: string
+        toelichting:
+          type: string
+
+    Fout:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Stabiele foutcode die door de Cockpit kan worden verwerkt.
+        message:
+          type: string
+          description: Leesbare foutmelding.
+        details:
+          type: string
+          description: Optionele technische of validatie-informatie.
+        correlatieId:
+          type: string
+          description: Correlatiekenmerk voor logging en foutanalyse.
+        logReference:
+          type: string
+          description: Verwijzing naar technische logging bij de Stekker.
+      example:
+        code: VALIDATION_ERROR
+        message: Request is ongeldig of onvolledig.
+        correlatieId: corr-20260923-001
+
+    SelectieStatus:
+      type: string
+      enum:
+        - IDLE
+        - RUNNING
+        - READY
+        - FAILED
+
+    VernietigingStatus:
+      type: string
+      enum:
+        - IDLE
+        - RUNNING
+        - COMPLETED
+        - PARTIAL
+        - FAILED
+
+    UitvoeringsresultaatWaarde:
+      type: string
+      enum:
+        - SUCCESS
+        - FAILED
+        - SKIPPED
+        - NOT_FOUND
+        - CHANGED

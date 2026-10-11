@@ -1,4 +1,4 @@
-# Vernietigingscockpit stekker Open Zaak
+# Vernietigingscockpit stekker Open Zaak.
 
 Stekker voor de Vernietigingscockpit met **Open Zaak** als bron. De stekker implementeert **Stekker API v2.0.0** (`spec/stekker-openapi-spec-v2.0.0.yaml`, kopie uit de architectuurrepo `Vernietigingscockpit`, `designrules/api/stekker-openapi-spec.yaml`); MDTO is leidend (ADR-0005), identiteit en momentopname volgen ADR-0007.
 

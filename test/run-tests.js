@@ -1,0 +1,13 @@
+import './selectie-service.test.js';
+import './vernietiging-service.test.js';
+import './contract/stekker-contract.test.js';
+import './cockpit-sequence.test.js';
+import './http-server.test.js';
+import './scenario.test.js';
+import './persistentie.test.js';
+import './jwt-auth.test.js';
+import './runtime-lock.test.js';
+import './api-v2.test.js';
+import './zgw-client.test.js';
+import './openzaak-selectie.test.js';
+import './openzaak-vernietiging.test.js';

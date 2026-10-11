@@ -1,0 +1,82 @@
+services:
+  stekker-openzaak:
+    build: .
+    image: vernietigingscockpit-stekker-openzaak:local
+    container_name: ${STEKKER_CONTAINER_NAME:-stekker-openzaak}
+    environment:
+      PORT: "3000"
+      STEKKER_NAAM: "${STEKKER_NAAM:-OpenZaak-stekker}"
+      STEKKER_OMSCHRIJVING: "${STEKKER_OMSCHRIJVING:-}"
+      STEKKER_CONFIGURATIEVERSIE: "${STEKKER_CONFIGURATIEVERSIE:-}"
+      STEKKER_DATASOURCE_NAME: "${STEKKER_DATASOURCE_NAME:-openzaak}"
+      SELECTIE_PROCESSING_DELAY_MS: "${SELECTIE_PROCESSING_DELAY_MS:-100}"
+      VERNIETIGING_PROCESSING_DELAY_MS: "${VERNIETIGING_PROCESSING_DELAY_MS:-100}"
+      VERNIETIGING_MAX_POGINGEN: "${VERNIETIGING_MAX_POGINGEN:-3}"
+      VERNIETIGING_WACHTTIJD_POGING_MS: "${VERNIETIGING_WACHTTIJD_POGING_MS:-2000}"
+      MAX_BODY_BYTES: "${MAX_BODY_BYTES:-1048576}"
+      LOG_REQUESTS: "${LOG_REQUESTS:-true}"
+      OPENZAAK_ZAKEN_URL: "${OPENZAAK_ZAKEN_URL:-}"
+      OPENZAAK_DOCUMENTEN_URL: "${OPENZAAK_DOCUMENTEN_URL:-}"
+      OPENZAAK_BESLUITEN_URL: "${OPENZAAK_BESLUITEN_URL:-}"
+      OPENZAAK_CATALOGI_URL: "${OPENZAAK_CATALOGI_URL:-}"
+      OPENZAAK_CLIENT_ID: "${OPENZAAK_CLIENT_ID:-}"
+      OPENZAAK_SECRET: "${OPENZAAK_SECRET:-}"
+      SELECTIELIJST_URL: "${SELECTIELIJST_URL:-https://selectielijst.openzaak.nl/api/v1/}"
+      OPENZAAK_TIMEOUT_MS: "${OPENZAAK_TIMEOUT_MS:-30000}"
+      OPENZAAK_PARALLEL: "${OPENZAAK_PARALLEL:-8}"
+      OPENZAAK_GET_POGINGEN: "${OPENZAAK_GET_POGINGEN:-3}"
+      OPENZAAK_ZAAKTYPEN: "${OPENZAAK_ZAAKTYPEN:-}"
+      STEKKER_ARCHIEFVORMER: "${STEKKER_ARCHIEFVORMER:-}"
+      STEKKER_IDENTIFICATIEBRON_TECHNISCH: "${STEKKER_IDENTIFICATIEBRON_TECHNISCH:-}"
+      STEKKER_IDENTIFICATIEBRON_KENMERK: "${STEKKER_IDENTIFICATIEBRON_KENMERK:-}"
+      STEKKER_IDENTIFICATIEBRON_DOCUMENT: "${STEKKER_IDENTIFICATIEBRON_DOCUMENT:-}"
+      STEKKER_IDENTIFICATIEBRON_BESLUIT: "${STEKKER_IDENTIFICATIEBRON_BESLUIT:-}"
+      STEKKER_VERNIETIGINGSMETHODE: "${STEKKER_VERNIETIGINGSMETHODE:-Verwijderd via bronfunctie}"
+      STEKKER_VERNIETIGINGSMETHODE_TOELICHTING: "${STEKKER_VERNIETIGINGSMETHODE_TOELICHTING:-}"
+      # Via Traefik bereikbaar: authenticatie standaard aan. Zonder AUTH_ISSUER/AUTH_JWKS_URL start de stekker niet.
+      AUTH_ENABLED: "${AUTH_ENABLED:-true}"
+      AUTH_ISSUER: "${AUTH_ISSUER:-}"
+      AUTH_JWKS_URL: "${AUTH_JWKS_URL:-}"
+      AUTH_AUDIENCE: "${AUTH_AUDIENCE:-}"
+      SCENARIO_FAILED_PERCENTAGE: "${SCENARIO_FAILED_PERCENTAGE:-0}"
+      SCENARIO_CHANGED_PERCENTAGE: "${SCENARIO_CHANGED_PERCENTAGE:-0}"
+      SCENARIO_NOT_FOUND_PERCENTAGE: "${SCENARIO_NOT_FOUND_PERCENTAGE:-0}"
+      SCENARIO_SKIPPED_PERCENTAGE: "${SCENARIO_SKIPPED_PERCENTAGE:-0}"
+      SCENARIO_SELECTIE_FAIL: "${SCENARIO_SELECTIE_FAIL:-false}"
+      SCENARIO_LEVER_NIET_V: "${SCENARIO_LEVER_NIET_V:-false}"
+      SCENARIO_HTTP_FAIL_FIRST_N: "${SCENARIO_HTTP_FAIL_FIRST_N:-0}"
+      SCENARIO_HTTP_FAIL_STATUS: "${SCENARIO_HTTP_FAIL_STATUS:-503}"
+      SCENARIO_HTTP_FAIL_MODE: "${SCENARIO_HTTP_FAIL_MODE:-voor}"
+      SCENARIO_HTTP_FAIL_ENDPOINTS: "${SCENARIO_HTTP_FAIL_ENDPOINTS:-}"
+      SCENARIO_HTTP_DELAY_MS: "${SCENARIO_HTTP_DELAY_MS:-0}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-stekker-openzaak}.rule=Host(`${STEKKER_DOMAIN:-stekker-openzaak.localhost}`)"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-stekker-openzaak}.entrypoints=${TRAEFIK_ENTRYPOINTS:-web}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-stekker-openzaak}.tls=${TRAEFIK_TLS:-false}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-stekker-openzaak}.tls.certresolver=${TRAEFIK_CERTRESOLVER:-}"
+      - "traefik.http.services.${TRAEFIK_SERVICE_NAME:-stekker-openzaak}.loadbalancer.server.port=3000"
+    volumes:
+      - stekker-runtime:/app/runtime
+    networks:
+      - traefik
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  stekker-runtime:
+    name: ${STEKKER_RUNTIME_VOLUME:-stekker-openzaak-runtime}
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik}
+    external: true

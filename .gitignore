@@ -1,0 +1,6 @@
+runtime/
+.env
+.env.*
+!.env.example
+node_modules/
+runtime-openzaak-seed.json
